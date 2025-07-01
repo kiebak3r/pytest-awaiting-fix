@@ -1,0 +1,10 @@
+site_name: pytest-awaiting-fix
+site_description: A simple plugin to use with pytest for traceability across Jira and disabled automated tests
+site_author: Kie Baker
+
+theme: readthedocs
+
+repo_url: https://github.com/kiebak3r/pytest-awaiting-fix
+
+pages:
+- Home: index.md
