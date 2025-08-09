@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pytest-awaiting-fix"
 description = "A simple plugin to use with pytest for traceability across Jira and disabled automated tests"
-version = "1.1"
+version = "1.2"
 readme = "README.rst"
 requires-python = ">=3.8"
 authors = [

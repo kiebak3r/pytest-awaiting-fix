@@ -86,20 +86,49 @@ def pytest_sessionfinish(session, exitstatus):
     if _bug_numbers:
         for bug in sorted(_bug_numbers):
             _jira_status_cache.get(bug, "UNKNOWN")
-            comments = jira_client.comments(bug)
-            already_exists = any(tagline in comment.body for comment in comments)
+            
+            # Gather current test info
+            test_names = sorted(_test_names.get(bug, []))
+            new_count = len(test_names)
+            tests_block = "\n".join(f"➡️ {test_name}" for test_name in test_names)
+            body = (
+                f"{tagline}\n"
+                f"🔔 When resolved, please re-enable automated test(s):\n{tests_block}"
+            )
 
-            if not already_exists:
-                test_names = _test_names.get(bug, [])
-                tests = "\n".join(f"➡️ {test_name}" for test_name in sorted(test_names))
-                body = (
-                    f"{tagline}\n"
-                    f"🔔 When resolved, please re-enable automated test(s):\n{tests}"
-                )
+            # Fetch existing comments and find the most recent awaiting-fix one (if any)
+            comments = jira_client.comments(bug)
+            awaiting_comments = [c for c in comments if getattr(c, 'body', '') and tagline in c.body]
+
+            def parse_existing_count(text):
+                return sum(1 for line in text.splitlines() if line.strip().startswith("➡️ "))
+
+            if not awaiting_comments:
+                # No prior awaiting-fix comment: add a fresh one
                 try:
                     jira_client.add_comment(bug, body)
                     print(f"✅ Comment added to {bug}")
                 except Exception as e:
                     raise RuntimeError(f"❌ Failed to add comment to {bug}: {e}")
             else:
-                print(f"⚠️ Comment already exists for {bug}")
+                # Choose the most recent by comment id (ids are numeric strings in Jira)
+                try:
+                    latest = max(awaiting_comments, key=lambda c: int(getattr(c, 'id', '0')))
+                except Exception:
+                    latest = awaiting_comments[-1]
+
+                existing_count = parse_existing_count(getattr(latest, 'body', ''))
+                if new_count != existing_count:
+                    try:
+                        comment_to_delete = jira_client.comment(bug, getattr(latest, 'id'))
+                        comment_to_delete.delete()
+                        print(f"🗑️ Deleted outdated awaiting-fix comment on {bug}")
+                    except Exception as e:
+                        raise RuntimeError(f"❌ Failed to delete existing awaiting-fix comment on {bug}: {e}")
+                    try:
+                        jira_client.add_comment(bug, body)
+                        print(f"✅ Comment updated on {bug}")
+                    except Exception as e:
+                        raise RuntimeError(f"❌ Failed to add updated comment to {bug}: {e}")
+                else:
+                    print(f"⚠️ Existing awaiting-fix comment for {bug} is up-to-date or has higher/equal count. leaving as is.")
